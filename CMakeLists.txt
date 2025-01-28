@@ -344,6 +344,8 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/razor_cpu/razor_cpu.h
                 src/core/libraries/mouse/mouse.cpp
                 src/core/libraries/mouse/mouse.h
+                src/core/libraries/web_browser_dialog/webbrowserdialog.cpp
+                src/core/libraries/web_browser_dialog/webbrowserdialog.h
 )
 
 set(VIDEOOUT_LIB src/core/libraries/videoout/buffer.h
@@ -434,6 +436,8 @@ set(NP_LIBS src/core/libraries/np_common/np_common.cpp
             src/core/libraries/np_trophy/np_trophy_error.h
             src/core/libraries/np_web_api/np_web_api.cpp
             src/core/libraries/np_web_api/np_web_api.h
+            src/core/libraries/np_party/np_party.cpp
+            src/core/libraries/np_party/np_party.h
 )
 
 set(MISC_LIBS  src/core/libraries/screenshot/screenshot.cpp
@@ -557,16 +561,16 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/devices/logger.cpp
          src/core/devices/logger.h
          src/core/devices/nop_device.h
-         src/core/devices/dev_console.cpp
-         src/core/devices/dev_console.h
-         src/core/devices/deci_tty6.cpp
-         src/core/devices/deci_tty6.h
-         src/core/devices/random.cpp
-         src/core/devices/random.h
-         src/core/devices/urandom.cpp
-         src/core/devices/urandom.h
-         src/core/devices/srandom.cpp
-         src/core/devices/srandom.h
+         src/core/devices/console_device.cpp
+         src/core/devices/console_device.h
+         src/core/devices/deci_tty6_device.cpp
+         src/core/devices/deci_tty6_device.h
+         src/core/devices/random_device.cpp
+         src/core/devices/random_device.h
+         src/core/devices/urandom_device.cpp
+         src/core/devices/urandom_device.h
+         src/core/devices/srandom_device.cpp
+         src/core/devices/srandom_device.h
          src/core/file_format/pfs.h
          src/core/file_format/pkg.cpp
          src/core/file_format/pkg.h
@@ -751,8 +755,6 @@ set(VIDEO_CORE src/video_core/amdgpu/liverpool.cpp
                src/video_core/renderer_vulkan/vk_common.h
                src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
                src/video_core/renderer_vulkan/vk_compute_pipeline.h
-               src/video_core/renderer_vulkan/vk_descriptor_update_queue.cpp
-               src/video_core/renderer_vulkan/vk_descriptor_update_queue.h
                src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
                src/video_core/renderer_vulkan/vk_graphics_pipeline.h
                src/video_core/renderer_vulkan/vk_instance.cpp
