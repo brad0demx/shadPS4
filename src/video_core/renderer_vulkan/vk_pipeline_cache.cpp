@@ -261,8 +261,9 @@ bool ShouldSkipShader(u64 shader_hash, const char* shader_type) {
         //Required to get Lies of P to menus
         0x7eaca10c670a8c03,
 
-        //Sekiro gs shader before "Ring Access Elimination 131" assert
+        //Sekiro gs shader before "Ring Access Elimination 131" assert, and cs shader which drops FPS
         0x7ee03d3f,
+        0x49f36018,
 
     };
     if (std::ranges::contains(skip_hashes, shader_hash)) {
