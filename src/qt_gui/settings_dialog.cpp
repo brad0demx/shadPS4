@@ -58,6 +58,7 @@ QStringList languageNames = {"Arabic",
 
 const QVector<int> languageIndexes = {21, 23, 14, 6, 18, 1, 12, 22, 2, 4,  25, 24, 29, 5,  0, 9,
                                       15, 16, 17, 7, 26, 8, 11, 20, 3, 13, 27, 10, 19, 30, 28};
+QMap<QString, QString> channelMap;
 
 SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
                                std::shared_ptr<CompatibilityInfoClass> m_compat_info,
@@ -71,8 +72,10 @@ SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
 
     ui->buttonBox->button(QDialogButtonBox::StandardButton::Close)->setFocus();
 
+    channelMap = {{tr("Release"), "Release"}, {tr("Nightly"), "Nightly"}};
+
     // Add list of available GPUs
-    ui->graphicsAdapterBox->addItem("Auto Select"); // -1, auto selection
+    ui->graphicsAdapterBox->addItem(tr("Auto Select")); // -1, auto selection
     for (const auto& device : physical_devices) {
         ui->graphicsAdapterBox->addItem(device);
     }
@@ -137,13 +140,23 @@ SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
 #if (QT_VERSION < QT_VERSION_CHECK(6, 7, 0))
         connect(ui->updateCheckBox, &QCheckBox::stateChanged, this,
                 [](int state) { Config::setAutoUpdate(state == Qt::Checked); });
+
+        connect(ui->changelogCheckBox, &QCheckBox::stateChanged, this,
+                [](int state) { Config::setAlwaysShowChangelog(state == Qt::Checked); });
 #else
         connect(ui->updateCheckBox, &QCheckBox::checkStateChanged, this,
                 [](Qt::CheckState state) { Config::setAutoUpdate(state == Qt::Checked); });
+
+        connect(ui->changelogCheckBox, &QCheckBox::checkStateChanged, this,
+                [](Qt::CheckState state) { Config::setAlwaysShowChangelog(state == Qt::Checked); });
 #endif
 
         connect(ui->updateComboBox, &QComboBox::currentTextChanged, this,
-                [](const QString& channel) { Config::setUpdateChannel(channel.toStdString()); });
+                [this](const QString& channel) {
+                    if (channelMap.contains(channel)) {
+                        Config::setUpdateChannel(channelMap.value(channel).toStdString());
+                    }
+                });
 
         connect(ui->checkUpdateButton, &QPushButton::clicked, this, []() {
             auto checkUpdate = new CheckUpdate(true);
@@ -159,20 +172,33 @@ SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
                 });
 
 #if (QT_VERSION < QT_VERSION_CHECK(6, 7, 0))
-        connect(ui->enableCompatibilityCheckBox, &QCheckBox::stateChanged, this, [this](int state) {
+        connect(ui->enableCompatibilityCheckBox, &QCheckBox::stateChanged, this,
+                [this, m_compat_info](int state) {
 #else
         connect(ui->enableCompatibilityCheckBox, &QCheckBox::checkStateChanged, this,
-                [this](Qt::CheckState state) {
+                [this, m_compat_info](Qt::CheckState state) {
 #endif
-            Config::setCompatibilityEnabled(state);
-            emit CompatibilityChanged();
-        });
+                    Config::setCompatibilityEnabled(state);
+                    if (state) {
+                        m_compat_info->LoadCompatibilityFile();
+                    }
+                    emit CompatibilityChanged();
+                });
     }
 
     // Gui TAB
     {
         connect(ui->chooseHomeTabComboBox, &QComboBox::currentTextChanged, this,
                 [](const QString& hometab) { Config::setChooseHomeTab(hometab.toStdString()); });
+
+#if (QT_VERSION < QT_VERSION_CHECK(6, 7, 0))
+        connect(ui->showBackgroundImageCheckBox, &QCheckBox::stateChanged, this, [](int state) {
+#else
+        connect(ui->showBackgroundImageCheckBox, &QCheckBox::checkStateChanged, this,
+                [](Qt::CheckState state) {
+#endif
+            Config::setShowBackgroundImage(state == Qt::Checked);
+        });
     }
     // Input TAB
     {
@@ -251,6 +277,7 @@ SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
 #ifdef ENABLE_UPDATER
         ui->updaterGroupBox->installEventFilter(this);
 #endif
+        ui->GUIBackgroundImageGroupBox->installEventFilter(this);
         ui->GUIMusicGroupBox->installEventFilter(this);
         ui->disableTrophycheckBox->installEventFilter(this);
         ui->enableCompatibilityCheckBox->installEventFilter(this);
@@ -269,6 +296,7 @@ SettingsDialog::SettingsDialog(std::span<const QString> physical_devices,
         ui->heightDivider->installEventFilter(this);
         ui->dumpShadersCheckBox->installEventFilter(this);
         ui->nullGpuCheckBox->installEventFilter(this);
+        ui->enableHDRCheckBox->installEventFilter(this);
 
         // Paths
         ui->gameFoldersGroupBox->installEventFilter(this);
@@ -326,7 +354,7 @@ void SettingsDialog::LoadValuesFromConfig() {
                                 toml::find_or<int>(data, "Settings", "consoleLanguage", 6))) %
         languageIndexes.size());
     ui->emulatorLanguageComboBox->setCurrentIndex(
-        languages[toml::find_or<std::string>(data, "GUI", "emulatorLanguage", "en")]);
+        languages[toml::find_or<std::string>(data, "GUI", "emulatorLanguage", "en_US")]);
     ui->hideCursorComboBox->setCurrentIndex(toml::find_or<int>(data, "Input", "cursorState", 1));
     OnCursorStateChanged(toml::find_or<int>(data, "Input", "cursorState", 1));
     ui->idleTimeoutSpinBox->setValue(toml::find_or<int>(data, "Input", "cursorHideTimeout", 5));
@@ -338,6 +366,7 @@ void SettingsDialog::LoadValuesFromConfig() {
     ui->vblankSpinBox->setValue(toml::find_or<int>(data, "GPU", "vblankDivider", 1));
     ui->dumpShadersCheckBox->setChecked(toml::find_or<bool>(data, "GPU", "dumpShaders", false));
     ui->nullGpuCheckBox->setChecked(toml::find_or<bool>(data, "GPU", "nullGpu", false));
+    ui->enableHDRCheckBox->setChecked(toml::find_or<bool>(data, "General", "allowHDR", false));
     ui->playBGMCheckBox->setChecked(toml::find_or<bool>(data, "General", "playBGM", false));
     ui->disableTrophycheckBox->setChecked(
         toml::find_or<bool>(data, "General", "isTrophyPopupDisabled", false));
@@ -351,8 +380,9 @@ void SettingsDialog::LoadValuesFromConfig() {
         toml::find_or<bool>(data, "General", "separateUpdateEnabled", false));
     ui->gameSizeCheckBox->setChecked(toml::find_or<bool>(data, "GUI", "loadGameSizeEnabled", true));
     ui->showSplashCheckBox->setChecked(toml::find_or<bool>(data, "General", "showSplash", false));
-    ui->logTypeComboBox->setCurrentText(
-        QString::fromStdString(toml::find_or<std::string>(data, "General", "logType", "async")));
+    std::string logType = Config::getLogType();
+    ui->logTypeComboBox->setCurrentText(logType == "async" ? tr("async")
+                                                           : (logType == "sync" ? tr("sync") : ""));
     ui->logFilterLineEdit->setText(
         QString::fromStdString(toml::find_or<std::string>(data, "General", "logFilter", "")));
     ui->userNameLineEdit->setText(
@@ -381,15 +411,14 @@ void SettingsDialog::LoadValuesFromConfig() {
 
 #ifdef ENABLE_UPDATER
     ui->updateCheckBox->setChecked(toml::find_or<bool>(data, "General", "autoUpdate", false));
-    std::string updateChannel = toml::find_or<std::string>(data, "General", "updateChannel", "");
-    if (updateChannel != "Release" && updateChannel != "Nightly") {
-        if (Common::isRelease) {
-            updateChannel = "Release";
-        } else {
-            updateChannel = "Nightly";
-        }
-    }
-    ui->updateComboBox->setCurrentText(QString::fromStdString(updateChannel));
+    ui->changelogCheckBox->setChecked(
+        toml::find_or<bool>(data, "General", "alwaysShowChangelog", false));
+
+    QString updateChannel = QString::fromStdString(Config::getUpdateChannel());
+    ui->updateComboBox->setCurrentText(
+        channelMap.key(updateChannel != "Release" && updateChannel != "Nightly"
+                           ? (Common::isRelease ? "Release" : "Nightly")
+                           : updateChannel));
 #endif
 
     std::string chooseHomeTab = toml::find_or<std::string>(data, "General", "chooseHomeTab", "");
@@ -410,6 +439,8 @@ void SettingsDialog::LoadValuesFromConfig() {
 
     ui->removeFolderButton->setEnabled(!ui->gameFoldersListWidget->selectedItems().isEmpty());
     ResetInstallFolders();
+    ui->backgroundImageOpacitySlider->setValue(Config::getBackgroundImageOpacity());
+    ui->showBackgroundImageCheckBox->setChecked(Config::getShowBackgroundImage());
 }
 
 void SettingsDialog::InitializeEmulatorLanguages() {
@@ -475,108 +506,109 @@ int SettingsDialog::exec() {
 SettingsDialog::~SettingsDialog() {}
 
 void SettingsDialog::updateNoteTextEdit(const QString& elementName) {
-    QString text; // texts are only in .ts translation files for better formatting
+    QString text;
 
+    // clang-format off
     // General
     if (elementName == "consoleLanguageGroupBox") {
-        text = tr("consoleLanguageGroupBox");
+        text = tr("Console Language:\\nSets the language that the PS4 game uses.\\nIt's recommended to set this to a language the game supports, which will vary by region.");
     } else if (elementName == "emulatorLanguageGroupBox") {
-        text = tr("emulatorLanguageGroupBox");
+        text = tr("Emulator Language:\\nSets the language of the emulator's user interface.");
     } else if (elementName == "fullscreenCheckBox") {
-        text = tr("fullscreenCheckBox");
+        text = tr("Enable Full Screen:\\nAutomatically puts the game window into full-screen mode.\\nThis can be toggled by pressing the F11 key.");
     } else if (elementName == "separateUpdatesCheckBox") {
-        text = tr("separateUpdatesCheckBox");
+        text = tr("Enable Separate Update Folder:\\nEnables installing game updates into a separate folder for easy management.\\nThis can be manually created by adding the extracted update to the game folder with the name 'CUSA00000-UPDATE' where the CUSA ID matches the game's ID.");
     } else if (elementName == "showSplashCheckBox") {
-        text = tr("showSplashCheckBox");
+        text = tr("Show Splash Screen:\\nShows the game's splash screen (a special image) while the game is starting.");
     } else if (elementName == "discordRPCCheckbox") {
-        text = tr("discordRPCCheckbox");
+        text = tr("Enable Discord Rich Presence:\\nDisplays the emulator icon and relevant information on your Discord profile.");
     } else if (elementName == "userName") {
-        text = tr("userName");
-    } else if (elementName == "label_Trophy") {
-        text = tr("TrophyKey");
-    } else if (elementName == "trophyKeyLineEdit") {
-        text = tr("TrophyKey");
+        text = tr("Username:\\nSets the PS4's account username, which may be displayed by some games.");
+    } else if (elementName == "label_Trophy" || elementName == "trophyKeyLineEdit") {
+        text = tr("Trophy Key:\\nKey used to decrypt trophies. Must be obtained from your jailbroken console.\\nMust contain only hex characters.");
     } else if (elementName == "logTypeGroupBox") {
-        text = tr("logTypeGroupBox");
+        text = tr("Log Type:\\nSets whether to synchronize the output of the log window for performance. May have adverse effects on emulation.");
     } else if (elementName == "logFilter") {
-        text = tr("logFilter");
+        text = tr("Log Filter:\nFilters the log to only print specific information.\nExamples: 'Core:Trace' 'Lib.Pad:Debug Common.Filesystem:Error' '*:Critical'\\nLevels: Trace, Debug, Info, Warning, Error, Critical - in this order, a specific level silences all levels preceding it in the list and logs every level after it.");
 #ifdef ENABLE_UPDATER
     } else if (elementName == "updaterGroupBox") {
-        text = tr("updaterGroupBox");
+        text = tr("Update:\\nRelease: Official versions released every month that may be very outdated, but are more reliable and tested.\\nNightly: Development versions that have all the latest features and fixes, but may contain bugs and are less stable.");
 #endif
+    } else if (elementName == "GUIBackgroundImageGroupBox") {
+        text = tr("Background Image:\\nControl the opacity of the game background image.");
     } else if (elementName == "GUIMusicGroupBox") {
-        text = tr("GUIMusicGroupBox");
+        text = tr("Play Title Music:\\nIf a game supports it, enable playing special music when selecting the game in the GUI.");
+    } else if (elementName == "enableHDRCheckBox") {
+        text = tr("Enable HDR:\\nEnables HDR in games that support it.\\nYour monitor must have support for the BT2020 PQ color space and the RGB10A2 swapchain format.");
     } else if (elementName == "disableTrophycheckBox") {
-        text = tr("disableTrophycheckBox");
+        text = tr("Disable Trophy Pop-ups:\\nDisable in-game trophy notifications. Trophy progress can still be tracked using the Trophy Viewer (right-click the game in the main window).");
     } else if (elementName == "enableCompatibilityCheckBox") {
-        text = tr("enableCompatibilityCheckBox");
+        text = tr("Display Compatibility Data:\\nDisplays game compatibility information in table view. Enable 'Update Compatibility On Startup' to get up-to-date information.");
     } else if (elementName == "checkCompatibilityOnStartupCheckBox") {
-        text = tr("checkCompatibilityOnStartupCheckBox");
+        text = tr("Update Compatibility On Startup:\\nAutomatically update the compatibility database when shadPS4 starts.");
     } else if (elementName == "updateCompatibilityButton") {
-        text = tr("updateCompatibilityButton");
+        text = tr("Update Compatibility Database:\\nImmediately update the compatibility database.");
     }
 
     // Input
     if (elementName == "hideCursorGroupBox") {
-        text = tr("hideCursorGroupBox");
+        text = tr("Hide Cursor:\\nChoose when the cursor will disappear:\\nNever: You will always see the mouse.\\nidle: Set a time for it to disappear after being idle.\\nAlways: you will never see the mouse.");
     } else if (elementName == "idleTimeoutGroupBox") {
-        text = tr("idleTimeoutGroupBox");
+        text = tr("Hide Idle Cursor Timeout:\\nThe duration (seconds) after which the cursor that has been idle hides itself.");
     } else if (elementName == "backButtonBehaviorGroupBox") {
-        text = tr("backButtonBehaviorGroupBox");
+        text = tr("Back Button Behavior:\\nSets the controller's back button to emulate tapping the specified position on the PS4 touchpad.");
     }
 
     // Graphics
     if (elementName == "graphicsAdapterGroupBox") {
-        text = tr("graphicsAdapterGroupBox");
-    } else if (elementName == "widthGroupBox") {
-        text = tr("resolutionLayout");
-    } else if (elementName == "heightGroupBox") {
-        text = tr("resolutionLayout");
+        text = tr("Graphics Device:\\nOn multiple GPU systems, select the GPU the emulator will use from the drop down list,\\nor select 'Auto Select' to automatically determine it.");
+    } else if (elementName == "widthGroupBox" || elementName == "heightGroupBox") {
+        text = tr("Width/Height:\\nSets the size of the emulator window at launch, which can be resized during gameplay.\\nThis is different from the in-game resolution.");
     } else if (elementName == "heightDivider") {
-        text = tr("heightDivider");
+        text = tr("Vblank Divider:\\nThe frame rate at which the emulator refreshes at is multiplied by this number. Changing this may have adverse effects, such as increasing the game speed, or breaking critical game functionality that does not expect this to change!");
     } else if (elementName == "dumpShadersCheckBox") {
-        text = tr("dumpShadersCheckBox");
+        text = tr("Enable Shaders Dumping:\\nFor the sake of technical debugging, saves the games shaders to a folder as they render.");
     } else if (elementName == "nullGpuCheckBox") {
-        text = tr("nullGpuCheckBox");
+        text = tr("Enable Null GPU:\\nFor the sake of technical debugging, disables game rendering as if there were no graphics card.");
     }
 
     // Path
     if (elementName == "gameFoldersGroupBox" || elementName == "gameFoldersListWidget") {
-        text = tr("gameFoldersBox");
+        text = tr("Game Folders:\\nThe list of folders to check for installed games.");
     } else if (elementName == "addFolderButton") {
-        text = tr("addFolderButton");
+        text = tr("Add:\\nAdd a folder to the list.");
     } else if (elementName == "removeFolderButton") {
-        text = tr("removeFolderButton");
+        text = tr("Remove:\\nRemove a folder from the list.");
     }
 
     // Save Data
     if (elementName == "saveDataGroupBox" || elementName == "currentSaveDataPath") {
-        text = tr("saveDataBox");
+        text = tr("Save Data Path:\\nThe folder where game save data will be saved.");
     } else if (elementName == "browseButton") {
-        text = tr("browseButton");
+        text = tr("Browse:\\nBrowse for a folder to set as the save data path.");
     }
 
     // Debug
     if (elementName == "debugDump") {
-        text = tr("debugDump");
+        text = tr("Enable Debug Dumping:\\nSaves the import and export symbols and file header information of the currently running PS4 program to a directory.");
     } else if (elementName == "vkValidationCheckBox") {
-        text = tr("vkValidationCheckBox");
+        text = tr("Enable Vulkan Validation Layers:\\nEnables a system that validates the state of the Vulkan renderer and logs information about its internal state.\\nThis will reduce performance and likely change the behavior of emulation.");
     } else if (elementName == "vkSyncValidationCheckBox") {
-        text = tr("vkSyncValidationCheckBox");
+        text = tr("Enable Vulkan Synchronization Validation:\\nEnables a system that validates the timing of Vulkan rendering tasks.\\nThis will reduce performance and likely change the behavior of emulation.");
     } else if (elementName == "rdocCheckBox") {
-        text = tr("rdocCheckBox");
+        text = tr("Enable RenderDoc Debugging:\\nIf enabled, the emulator will provide compatibility with Renderdoc to allow capture and analysis of the currently rendered frame.");
     } else if (elementName == "crashDiagnosticsCheckBox") {
-        text = tr("crashDiagnosticsCheckBox");
+        text = tr("Crash Diagnostics:\\nCreates a .yaml file with info about the Vulkan state at the time of crashing.\\nUseful for debugging 'Device lost' errors. If you have this enabled, you should enable Host AND Guest Debug Markers.\\nDoes not work on Intel GPUs.\\nYou need Vulkan Validation Layers enabled and the Vulkan SDK for this to work.");
     } else if (elementName == "guestMarkersCheckBox") {
-        text = tr("guestMarkersCheckBox");
+        text = tr("Guest Debug Markers:\\nInserts any debug markers the game itself has added to the command buffer.\\nIf you have this enabled, you should enable Crash Diagnostics.\\nUseful for programs like RenderDoc.");
     } else if (elementName == "hostMarkersCheckBox") {
-        text = tr("hostMarkersCheckBox");
+        text = tr("Host Debug Markers:\\nInserts emulator-side information like markers for specific AMDGPU commands around Vulkan commands, as well as giving resources debug names.\\nIf you have this enabled, you should enable Crash Diagnostics.\\nUseful for programs like RenderDoc.");
     } else if (elementName == "copyGPUBuffersCheckBox") {
-        text = tr("copyGPUBuffersCheckBox");
+        text = tr("Copy GPU Buffers:\\nGets around race conditions involving GPU submits.\\nMay or may not help with PM4 type 0 crashes.");
     } else if (elementName == "collectShaderCheckBox") {
-        text = tr("collectShaderCheckBox");
+        text = tr("Collect Shaders:\\nYou need this enabled to edit shaders with the debug menu (Ctrl + F10).");
     }
-
+    // clang-format on
     ui->descriptionText->setText(text.replace("\\n", "\n"));
 }
 
@@ -606,7 +638,8 @@ void SettingsDialog::UpdateSettings() {
     Config::setIsMotionControlsEnabled(ui->motionControlsCheckBox->isChecked());
     Config::setisTrophyPopupDisabled(ui->disableTrophycheckBox->isChecked());
     Config::setPlayBGM(ui->playBGMCheckBox->isChecked());
-    Config::setLogType(ui->logTypeComboBox->currentText().toStdString());
+    Config::setAllowHDR(ui->enableHDRCheckBox->isChecked());
+    Config::setLogType((ui->logTypeComboBox->currentText() == tr("async") ? "async" : "sync"));
     Config::setLogFilter(ui->logFilterLineEdit->text().toStdString());
     Config::setUserName(ui->userNameLineEdit->text().toStdString());
     Config::setTrophyKey(ui->trophyKeyLineEdit->text().toStdString());
@@ -634,10 +667,14 @@ void SettingsDialog::UpdateSettings() {
     Config::setCollectShaderForDebug(ui->collectShaderCheckBox->isChecked());
     Config::setCopyGPUCmdBuffers(ui->copyGPUBuffersCheckBox->isChecked());
     Config::setAutoUpdate(ui->updateCheckBox->isChecked());
-    Config::setUpdateChannel(ui->updateComboBox->currentText().toStdString());
+    Config::setAlwaysShowChangelog(ui->changelogCheckBox->isChecked());
+    Config::setUpdateChannel(channelMap.value(ui->updateComboBox->currentText()).toStdString());
     Config::setChooseHomeTab(ui->chooseHomeTabComboBox->currentText().toStdString());
     Config::setCompatibilityEnabled(ui->enableCompatibilityCheckBox->isChecked());
     Config::setCheckCompatibilityOnStartup(ui->checkCompatibilityOnStartupCheckBox->isChecked());
+    Config::setBackgroundImageOpacity(ui->backgroundImageOpacitySlider->value());
+    emit BackgroundOpacityChanged(ui->backgroundImageOpacitySlider->value());
+    Config::setShowBackgroundImage(ui->showBackgroundImageCheckBox->isChecked());
 
 #ifdef ENABLE_DISCORD_RPC
     auto* rpc = Common::Singleton<DiscordRPCHandler::RPC>::Instance();
