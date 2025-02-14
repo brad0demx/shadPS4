@@ -241,6 +241,28 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline() {
     return it->second.get();
 }
 
+bool ShouldSkipShader(u64 shader_hash, const char* shader_type) {
+    static std::vector<u64> skip_hashes = {
+
+        //Required to get Lies of P to menus
+        0x7eaca10c670a8c03,
+
+        //Sekiro gs shader before "Ring Access Elimination 131" assert, and cs shader which drops FPS
+        0x7ee03d3f,
+        0x49f36018,
+
+        //Just Cause 3 fs shader compiled before unhandled access#
+
+        0xfe5bc30,
+
+    };
+    if (std::ranges::contains(skip_hashes, shader_hash)) {
+        LOG_WARNING(Render_Vulkan, "Skipped {} shader hash {:#x}.", shader_type, shader_hash);
+        return true;
+    }
+    return false;
+}
+
 const ComputePipeline* PipelineCache::GetComputePipeline() {
     if (!RefreshComputeKey()) {
         return nullptr;
@@ -381,6 +403,11 @@ bool PipelineCache::RefreshGraphicsKey() {
             return false;
         }
 
+        
+        if (ShouldSkipShader(bininfo.shader_hash, "graphics")) {
+            return false;
+        }
+
         auto params = Liverpool::GetParams(*pgm);
         std::optional<Shader::Gcn::FetchShaderData> fetch_shader_;
         std::tie(infos[stage_out_idx], modules[stage_out_idx], fetch_shader_,
@@ -489,6 +516,9 @@ bool PipelineCache::RefreshComputeKey() {
     Shader::Backend::Bindings binding{};
     const auto& cs_pgm = liverpool->GetCsRegs();
     const auto cs_params = Liverpool::GetParams(cs_pgm);
+    if (ShouldSkipShader(cs_params.hash, "compute")) {
+        return false;
+    }
     std::tie(infos[0], modules[0], fetch_shader, compute_key.value) =
         GetProgram(Shader::Stage::Compute, LogicalStage::Compute, cs_params, binding);
     return true;
